@@ -24,7 +24,7 @@ async function getEnergyDataForDay() {
         date_trunc('hour', timestamp) AS hour,
         MIN(timestamp) AS first_entry,
         MAX(timestamp) AS last_entry
-      FROM hp_data_upd
+      FROM energy_data
       WHERE timestamp >= current_date - interval '2 day'
         AND timestamp < current_date - interval '1 day'
         AND energy_meter_id IN (2, 4, 5, 6)
@@ -36,7 +36,7 @@ async function getEnergyDataForDay() {
         energy_meter_id,
         wh_received,
         timestamp
-      FROM hp_data_upd
+      FROM energy_data
       WHERE timestamp >= current_date - interval '2 day'
         AND timestamp < current_date - interval '1 day'
         AND energy_meter_id IN (2, 4, 5, 6)

@@ -12,7 +12,7 @@ export default function Home() {
     const fetchData = async () => {
       try {
         // Fetch data from the API endpoint
-        const response = await fetch('/api/hp-data');
+        const response = await fetch('/api/rp-data');
         const data = await response.json();
 
         // Set the fetched data
