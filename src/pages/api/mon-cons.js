@@ -15,20 +15,25 @@ function calculateConsumption(first, last) {
   return (last - first) / 1000; // Convert Wh to kWh
 }
 
-async function getEnergyDataForDay() {
+async function getEnergyDataForMonth(month) {
+  const startDate = new Date(month);
+  const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+
   const result = await pool.query(`
     WITH FirstLast AS (
-      -- Get the first and last entry for each energy meter from two days ago
+      -- Get the first and last entry for each energy meter for each day of the specified month
       SELECT
         energy_meter_id,
-        date_trunc('hour', timestamp) AS hour,
+        date_trunc('day', timestamp) AS day,
         MIN(timestamp) AS first_entry,
         MAX(timestamp) AS last_entry
       FROM energy_data
-      WHERE timestamp >= current_date - interval '2 day'
-        AND timestamp < current_date - interval '1 day'
+      WHERE timestamp >= $1
+        AND timestamp < $2
         AND energy_meter_id IN (2, 4, 5, 6)
-      GROUP BY energy_meter_id, hour
+        AND timestamp <= now() - interval '5 minutes' -- Only include data up to 5 minutes before the current time
+        AND date_trunc('day', timestamp) < date_trunc('day', now()) -- Only include complete days
+      GROUP BY energy_meter_id, day
     ),
     EnergyData AS (
       -- Get Wh received for each first and last entry
@@ -37,13 +42,14 @@ async function getEnergyDataForDay() {
         wh_received,
         timestamp
       FROM energy_data
-      WHERE timestamp >= current_date - interval '2 day'
-        AND timestamp < current_date - interval '1 day'
+      WHERE timestamp >= $1
+        AND timestamp < $2
         AND energy_meter_id IN (2, 4, 5, 6)
+        AND timestamp <= now() - interval '5 minutes' -- Only include data up to 5 minutes before the current time
     )
     SELECT
       f.energy_meter_id,
-      f.hour,
+      f.day,
       f.first_entry,
       f.last_entry,
       e1.wh_received AS first_wh_received,
@@ -51,12 +57,12 @@ async function getEnergyDataForDay() {
     FROM FirstLast f
     JOIN EnergyData e1 ON f.energy_meter_id = e1.energy_meter_id AND f.first_entry = e1.timestamp
     JOIN EnergyData e2 ON f.energy_meter_id = e2.energy_meter_id AND f.last_entry = e2.timestamp
-  `);
+  `, [startDate, endDate]);
 
   // Format the results
   const formattedResults = result.rows.map(entry => ({
     energy_meter_id: entry.energy_meter_id,
-    hour: entry.hour,
+    day: entry.day,
     first_entry: entry.first_entry,
     last_entry: entry.last_entry,
     first_wh_received: entry.first_wh_received,
@@ -64,39 +70,33 @@ async function getEnergyDataForDay() {
     wh_received_difference_kwh: calculateConsumption(entry.first_wh_received, entry.last_wh_received).toFixed(1) // Convert Wh to kWh with one decimal place
   }));
 
-  // Calculate the total energy consumption for each hour
-  const totalEnergyConsumptionByRange = formattedResults.reduce((acc, entry) => {
-    const hour = new Date(entry.hour).getHours();
-    const timeRange = `${hour.toString().padStart(2, '0')}:00:00-${hour.toString().padStart(2, '0')}:59:59`;
-    acc[timeRange] = (acc[timeRange] || 0) + parseFloat(entry.wh_received_difference_kwh);
-    return acc;
-  }, {});
-
-  // Calculate the total consumption for each energy meter from the sum of Wh Received differences
-  const totalConsumptionFromStart = formattedResults.reduce((acc, entry) => {
+  // Organize data by energy meter and day
+  const totalConsumptionByMeter = formattedResults.reduce((acc, entry) => {
     if (!acc[entry.energy_meter_id]) {
-      acc[entry.energy_meter_id] = {
-        total_wh_difference_kwh: 0,
-        initial_wh_received: entry.first_wh_received,
-        total_wh_received: entry.last_wh_received,
-        start_time: entry.first_entry,
-        end_time: entry.last_entry
-      };
+      acc[entry.energy_meter_id] = [];
     }
-    acc[entry.energy_meter_id].total_wh_difference_kwh += parseFloat(entry.wh_received_difference_kwh);
+    acc[entry.energy_meter_id].push({
+      day: entry.day,
+      first_entry: entry.first_entry,
+      last_entry: entry.last_entry,
+      first_wh_received: entry.first_wh_received,
+      last_wh_received: entry.last_wh_received,
+      total_wh_difference_kwh: parseFloat(entry.wh_received_difference_kwh)
+    });
     return acc;
   }, {});
 
-  return {
-    energyData: formattedResults,
-    totalEnergyConsumptionByRange,
-    totalConsumptionFromStart
-  };
+  return totalConsumptionByMeter;
 }
 
 export default async function handler(req, res) {
   try {
-    const energyData = await getEnergyDataForDay();
+    const { month } = req.query;
+    if (!month) {
+      return res.status(400).json({ error: 'Month parameter is required' });
+    }
+
+    const energyData = await getEnergyDataForMonth(month); // Call the function to get the data for the specified month
 
     res.status(200).json(energyData);
   } catch (error) {
@@ -104,4 +104,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: 'Database query failed' });
   }
 }
-
