@@ -16,6 +16,14 @@ function calculateConsumption(first, last) {
 }
 
 async function getEnergyDataForDate(date) {
+  const selectedDate = new Date(date).toISOString().split('T')[0];
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  let timestampCondition = `timestamp >= $1 AND timestamp < $1::date + interval '1 day'`;
+  if (isToday) {
+    timestampCondition += ` AND timestamp <= now() - interval '5 minutes'`;
+  }
+
   const result = await pool.query(`
     WITH FirstLast AS (
       -- Get the first and last entry for each energy meter for the selected date
@@ -25,10 +33,8 @@ async function getEnergyDataForDate(date) {
         MIN(timestamp) AS first_entry,
         MAX(timestamp) AS last_entry
       FROM energy_data
-      WHERE timestamp >= $1
-        AND timestamp < $1::date + interval '1 day'
+      WHERE ${timestampCondition}
         AND energy_meter_id IN (2, 4, 5, 6)
-        AND timestamp <= now() - interval '5 minutes' -- Only include data up to 5 minutes before the current time
       GROUP BY energy_meter_id, hour
     ),
     EnergyData AS (
@@ -38,10 +44,8 @@ async function getEnergyDataForDate(date) {
         wh_received,
         timestamp
       FROM energy_data
-      WHERE timestamp >= $1
-        AND timestamp < $1::date + interval '1 day'
+      WHERE ${timestampCondition}
         AND energy_meter_id IN (2, 4, 5, 6)
-        AND timestamp <= now() - interval '5 minutes' -- Only include data up to 5 minutes before the current time
     )
     SELECT
       f.energy_meter_id,

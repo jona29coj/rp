@@ -32,8 +32,11 @@ const Consumption = () => {
     setSelectedDate(event.target.value);
   };
 
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
   const currentHour = new Date().getHours();
-  const timeRanges = Array.from({ length: currentHour }, (_, i) => `${String(i).padStart(2, '0')}:00:00-${String(i).padStart(2, '0')}:59:59`);
+  const hoursInDay = isToday ? currentHour : 24;
+
+  const timeRanges = Array.from({ length: hoursInDay }, (_, i) => `${String(i).padStart(2, '0')}:00:00-${String(i).padStart(2, '0')}:59:59`);
 
   const energyConsumptionData = timeRanges.reduce((acc, range) => {
     acc[range] = totalEnergyConsumptionByRange[range] !== undefined ? Number(totalEnergyConsumptionByRange[range]).toFixed(1) : 0;

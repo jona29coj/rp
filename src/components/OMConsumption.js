@@ -69,6 +69,12 @@ const OMConsumption = () => {
           className="mb-4 p-2 border border-gray-300 rounded text-black"
         />
       </div>
+      <div>
+        <h2>Monthly Consumption Chart</h2>
+        <div className="w-full flex flex-col p-6 bg-white shadow-lg rounded-lg mb-6">
+          <HighchartsReact highcharts={Highcharts} options={getConsumptionChartOptions()} />
+        </div>
+      </div>
 
       <div>
         <h2>Daily Energy Consumption (kWh) for Each Day of the Month</h2>
@@ -102,12 +108,7 @@ const OMConsumption = () => {
         </table>
       </div>
 
-      <div>
-        <h2>Monthly Consumption Chart</h2>
-        <div className="w-full flex flex-col p-6 bg-white shadow-lg rounded-lg mb-6">
-          <HighchartsReact highcharts={Highcharts} options={getConsumptionChartOptions()} />
-        </div>
-      </div>
+     
     </div>
   );
 };
